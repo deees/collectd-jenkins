@@ -182,6 +182,8 @@ def read_config(conf):
         'enhanced_metrics': False,
         'include_optional_metrics': set(),
         'exclude_optional_metrics': set(),
+        'slave_metrics': False,
+        'job_metrics': False,
         'http_timeout': DEFAULT_API_TIMEOUT,
         'jobs_last_timestamp': {},
         'ssl_keys': {}
@@ -218,6 +220,10 @@ def read_config(conf):
             module_config['include_optional_metrics'].add(val.values[0])
         elif val.key == 'ExcludeMetric' and val.values[0] and val.values[0] not in NODE_METRICS:
             module_config['exclude_optional_metrics'].add(val.values[0])
+        elif val.key == 'SlaveMetrics' and val.values[0]:
+            module_config['slave_metrics'] = str_to_bool(val.values[0])
+        elif val.key == 'JobMetrics' and val.values[0]:
+            module_config['job_metrics'] = str_to_bool(val.values[0])
         elif val.key == 'ssl_keyfile' and val.values[0]:
             module_config['ssl_keys']['ssl_keyfile'] = val.values[0]
         elif val.key == 'ssl_certificate' and val.values[0]:
@@ -532,10 +538,11 @@ def read_metrics(module_config):
             NODE_STATUS_METRICS['ping'].type
         )
 
-    resp_obj = get_response(module_config['base_url'], 'computer', module_config)
+    if module_config['slave_metrics']:
+        resp_obj = get_response(module_config['base_url'], 'computer', module_config)
 
-    if resp_obj is not None:
-        report_slave_status(module_config, resp_obj['computer'])
+        if resp_obj is not None:
+            report_slave_status(module_config, resp_obj['computer'])
 
     resp_obj = get_response(module_config['base_url'], 'metrics', module_config)
 
@@ -547,18 +554,19 @@ def read_metrics(module_config):
     if resp_obj is not None:
         parse_and_post_healthcheck(module_config, resp_obj)
 
-    resp_obj = get_response(module_config['base_url'], 'jenkins', module_config)
+    if module_config['job_metrics']:
+        resp_obj = get_response(module_config['base_url'], 'jenkins', module_config)
 
-    if resp_obj is not None:
-        if "jobs" in resp_obj and resp_obj['jobs']:
-            jobs_data = resp_obj['jobs']
-            for job in jobs_data:
-                if job['name'] in module_config['jobs_last_timestamp']:
-                    last_timestamp = module_config['jobs_last_timestamp'][job['name']]
-                else:
-                    last_timestamp = int(time.time() * 1000) - (60 * 1000)
-                    module_config['jobs_last_timestamp'][job['name']] = last_timestamp
-                read_and_post_job_metrics(module_config, module_config['base_url'], job['name'], last_timestamp)
+        if resp_obj is not None:
+            if "jobs" in resp_obj and resp_obj['jobs']:
+                jobs_data = resp_obj['jobs']
+                for job in jobs_data:
+                    if job['name'] in module_config['jobs_last_timestamp']:
+                        last_timestamp = module_config['jobs_last_timestamp'][job['name']]
+                    else:
+                        last_timestamp = int(time.time() * 1000) - (60 * 1000)
+                        module_config['jobs_last_timestamp'][job['name']] = last_timestamp
+                    read_and_post_job_metrics(module_config, module_config['base_url'], job['name'], last_timestamp)
 
 
 def init():
