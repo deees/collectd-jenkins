@@ -60,9 +60,9 @@ NODE_STATUS_METRICS = {
         Metric('jenkins.node.online.status', 'gauge')
 }
 
-SLAVE_STATUS_METRICS = {
+COMPUTER_STATUS_METRICS = {
     'offline':
-        Metric('jenkins.node.slave.online.status', 'gauge')
+        Metric('jenkins.node.computer.online.status', 'gauge')
 }
 
 
@@ -182,7 +182,7 @@ def read_config(conf):
         'enhanced_metrics': False,
         'include_optional_metrics': set(),
         'exclude_optional_metrics': set(),
-        'slave_metrics': False,
+        'computer_metrics': False,
         'job_metrics': False,
         'http_timeout': DEFAULT_API_TIMEOUT,
         'jobs_last_timestamp': {},
@@ -220,8 +220,8 @@ def read_config(conf):
             module_config['include_optional_metrics'].add(val.values[0])
         elif val.key == 'ExcludeMetric' and val.values[0] and val.values[0] not in NODE_METRICS:
             module_config['exclude_optional_metrics'].add(val.values[0])
-        elif val.key == 'SlaveMetrics' and val.values[0]:
-            module_config['slave_metrics'] = str_to_bool(val.values[0])
+        elif val.key == 'ComputerMetrics' and val.values[0]:
+            module_config['computer_metrics'] = str_to_bool(val.values[0])
         elif val.key == 'JobMetrics' and val.values[0]:
             module_config['job_metrics'] = str_to_bool(val.values[0])
         elif val.key == 'ssl_keyfile' and val.values[0]:
@@ -475,19 +475,15 @@ def parse_and_post_healthcheck(module_config, resp):
             )
 
 
-def report_slave_status(module_config, slaves_data):
-    if slaves_data and len(slaves_data) > 1:
-        extra_dimensions = {}
-        for i in xrange(len(slaves_data)):
-            if slaves_data[i]['_class'] == "hudson.slaves.SlaveComputer":
-                extra_dimensions['Slave'] = slaves_data[i]['displayName']
-                prepare_and_dispatch_metric(
-                    module_config,
-                    SLAVE_STATUS_METRICS['offline'].name,
-                    not slaves_data[i]['offline'],
-                    SLAVE_STATUS_METRICS['offline'].type,
-                    extra_dimensions
-                )
+def report_computer_status(module_config, computers_data):
+    if computers_data and len(computers_data) > 1:
+        for i in xrange(len(computers_data)):
+            prepare_and_dispatch_metric(
+                module_config,
+                '%s-%s' % (COMPUTER_STATUS_METRICS['offline'].name, computers_data[i]['displayName']),
+                not computers_data[i]['offline'],
+                COMPUTER_STATUS_METRICS['offline'].type,
+            )
 
 
 def get_response(url, api_type, module_config):
@@ -538,11 +534,11 @@ def read_metrics(module_config):
             NODE_STATUS_METRICS['ping'].type
         )
 
-    if module_config['slave_metrics']:
+    if module_config['computer_metrics']:
         resp_obj = get_response(module_config['base_url'], 'computer', module_config)
 
         if resp_obj is not None:
-            report_slave_status(module_config, resp_obj['computer'])
+            report_computer_status(module_config, resp_obj['computer'])
 
     resp_obj = get_response(module_config['base_url'], 'metrics', module_config)
 
